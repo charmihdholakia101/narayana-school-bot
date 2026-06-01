@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: abhyasa-school-bot
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT --workers 4
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false        # you set this in Render dashboard
+      - key: MODEL_ID
+        value: claude-haiku-4-5-20251001
+    autoDeploy: true
+    plan: free
