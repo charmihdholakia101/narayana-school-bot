@@ -239,25 +239,23 @@
       if (showTe && data.answers.te) html += `<div class="sb-answer-block"><div class="sb-lang-label te">🔵 Telugu</div><div class="sb-te-block">${escapeHtml(data.answers.te)}</div></div>`;
       if (data.audio) {
         html += `<div class="sb-audio-row">`;
-        if (showEn && data.audio.en) html += `<button class="sb-play-btn" data-b64="${data.audio.en}">▶ English</button>`;
-        if (showTe && data.audio.te) html += `<button class="sb-play-btn te" data-b64="${data.audio.te}">▶ తెలుగు</button>`;
-        html += `<button class="sb-play-btn sb-stop-btn" id="sb-stop-audio">⏹ Stop</button>`;
+        if (showEn && data.audio.en) html += `<button class="sb-play-btn" data-b64="${data.audio.en}" data-lang="en">▶ English</button>`;
+        if (showTe && data.audio.te) html += `<button class="sb-play-btn" data-b64="${data.audio.te}" data-lang="te">▶ తెలుగు</button>`;
+        html += `<button class="sb-play-btn" id="sb-stop-audio" style="color:#dc2626;border-color:#dc2626;">⏹ Stop</button>`;
         html += `</div>`;
       }
       html += `</div>`;
       div.innerHTML = html;
       div.querySelectorAll(".sb-play-btn").forEach(btn => {
-        if (btn.id === "sb-stop-audio") {
-          btn.addEventListener("click", () => {
+        btn.addEventListener("click", () => {
+          if (btn.id === "sb-stop-audio") {
             if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-          });
-        } else {
-          btn.addEventListener("click", () => {
-            if (currentAudio) currentAudio.pause();
+          } else {
+            if (currentAudio) { currentAudio.pause(); }
             currentAudio = new Audio("data:audio/mp3;base64," + btn.dataset.b64);
             currentAudio.play();
-          });
-        }
+          }
+        });
       });
       messages.appendChild(div); scrollBottom();
       // Auto-play
@@ -318,25 +316,20 @@
           micBtn.innerHTML = STOP_SVG;
           micStatus.textContent = "🔴 Listening... click to stop";
         };
+        let fullTranscript = "";
         recog.onresult = e => {
-          // Show interim results as user speaks
+          // Accumulate transcript, show live — but DON'T send until user clicks Stop
           let interim = "";
-          let final = "";
           for (let i = e.resultIndex; i < e.results.length; i++) {
             if (e.results[i].isFinal) {
-              final += e.results[i][0].transcript;
+              fullTranscript += e.results[i][0].transcript + " ";
             } else {
               interim += e.results[i][0].transcript;
             }
           }
-          if (interim) micStatus.textContent = `🎤 "${interim}"`;
-          if (final) {
-            micStatus.textContent = `✅ "${final}"`;
-            try { micBtn._recog.stop(); } catch(e) {}
-            setTimeout(()=>{micStatus.textContent="";},2000);
-            sendQuestion(final);
-          }
+          micStatus.textContent = `🎤 ${fullTranscript || interim}`;
         };
+        micBtn._transcript = () => fullTranscript.trim();
         recog.onerror = () => {
           micStatus.textContent = "Could not understand. Please type.";
           setTimeout(()=>{micStatus.textContent="";},3000);
@@ -355,12 +348,19 @@
         micBtn._recog = recog;
 
       } else {
-        // Stop recording
+        // Stop recording and send whatever was said
+        const transcript = micBtn._transcript ? micBtn._transcript() : "";
         if (micBtn._recog) { try { micBtn._recog.stop(); } catch(e) {} }
         isRecording = false;
         micBtn.classList.remove("recording");
         micBtn.innerHTML = MIC_SVG;
         micStatus.textContent = "";
+        if (transcript) {
+          sendQuestion(transcript);
+        } else {
+          micStatus.textContent = "Nothing heard. Please try again.";
+          setTimeout(()=>{micStatus.textContent="";},2500);
+        }
       }
     });
   })();
