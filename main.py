@@ -1,6 +1,6 @@
 """
-Abhyasa School Voice Bot — FastAPI Backend
-- Scrapes abhyasaschool.com on startup
+Narayana Educational Institutions Voice Bot — FastAPI Backend
+- Scrapes narayanagroup.com on startup
 - Answers questions in English + Telugu
 - Uses AWS Bedrock (Bearer Token key)
 - Handles 25 concurrent users via async + semaphore
@@ -36,15 +36,16 @@ LLM_SEMAPHORE = asyncio.Semaphore(15)
 SCHOOL_CONTEXT = ""
 
 SCHOOL_URLS = [
-    "https://abhyasaschool.com/",
-    "https://abhyasaschool.com/curriculum-academics-co-curricular.php",
-    "https://abhyasaschool.com/fee-structure-for-2026-27.php",
-    "https://abhyasaschool.com/curriculum-student-life.php",
-    "https://abhyasaschool.com/aboutus-about-abhyasa-culture.php",
-    "https://abhyasaschool.com/contact-postal-and-emailaddress.php",
-    "https://abhyasaschool.com/awards.php",
-    "https://abhyasaschool.com/admission-students-admission-terms-and-conditions.php",
-    "https://abhyasaschool.com/curriculum-academic-year-calender-2025-26.php",
+    "https://narayanagroup.com/",
+    "https://narayanagroup.com/academics/",
+    "https://narayanagroup.com/centers/",
+    "https://narayanagroup.com/experience-narayana/",
+    "https://narayanagroup.com/digital/",
+    "https://narayanagroup.com/nsports/",
+    "https://narayanagroup.com/uniforms/",
+    "https://narayanagroup.com/careers/",
+    "https://narayanagroup.com/contact-us/",
+    "https://narayanagroup.com/blog/",
 ]
 
 http_client: Optional[httpx.AsyncClient] = None
@@ -52,7 +53,7 @@ http_client: Optional[httpx.AsyncClient] = None
 # ─────────────────────────────────────────────
 # APP
 # ─────────────────────────────────────────────
-app = FastAPI(title="Abhyasa School Bot")
+app = FastAPI(title="Narayana School Bot")
 
 app.add_middleware(
     CORSMiddleware,
@@ -66,12 +67,12 @@ app.add_middleware(
 async def startup():
     global http_client, SCHOOL_CONTEXT
     http_client = httpx.AsyncClient(
-        timeout=httpx.Timeout(60.0),
+        timeout=httpx.Timeout(30.0),
         limits=httpx.Limits(max_connections=30, max_keepalive_connections=20),
         follow_redirects=True,
         headers={"User-Agent": "Mozilla/5.0 (compatible; SchoolBot/1.0)"},
     )
-    log.info("Scraping school website...")
+    log.info("Scraping Narayana website...")
     SCHOOL_CONTEXT = await scrape_all_pages()
     log.info(f"School context loaded: {len(SCHOOL_CONTEXT):,} chars")
 
@@ -162,10 +163,13 @@ async def translate_to_english(text: str) -> str:
 async def get_answer(question_en: str) -> str:
     return await call_claude(
         (
-            "You are the official voice assistant for Abhyasa International Residential School, "
-            "Toopran, Telangana. Answer questions ONLY from the school information provided. "
+            "You are the official voice assistant for Narayana Educational Institutions. "
+            "Narayana has 950+ institutes across 23 states and 250+ cities in India, "
+            "with 600K+ learners annually and 50K+ skilled employees, established in 1979. "
+            "Answer questions ONLY from the school information provided. "
             "Be warm, helpful, and concise (2-4 sentences). "
-            "If not available, say so politely and suggest calling +91 91000 90333."
+            "If not available, say so politely and suggest visiting narayanagroup.com "
+            "or using the Fee Enquiry page."
         ),
         f"SCHOOL INFORMATION:\n{SCHOOL_CONTEXT}\n\nQUESTION: {question_en}",
         max_tokens=400,
@@ -203,6 +207,7 @@ class AskRequest(BaseModel):
 async def health():
     return {
         "status": "ok",
+        "school": "Narayana Educational Institutions",
         "context_chars": len(SCHOOL_CONTEXT),
         "context_loaded": len(SCHOOL_CONTEXT) > 100,
     }
@@ -216,20 +221,13 @@ async def ask(req: AskRequest):
     if not SCHOOL_CONTEXT:
         raise HTTPException(status_code=503, detail="School data not loaded yet")
 
-    # 1. Detect language
     lang = await detect_language(question)
     log.info(f"lang={lang} q={question[:80]}")
 
-    # 2. Translate to English if Telugu
     question_en = await translate_to_english(question) if lang == "te" else question
-
-    # 3. Get English answer
     en_answer = await get_answer(question_en)
-
-    # 4. Translate to Telugu
     te_answer = await translate_to_telugu(en_answer)
 
-    # 5. TTS for both languages in parallel
     audio = {}
     if req.tts:
         loop = asyncio.get_event_loop()
