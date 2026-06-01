@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Narayana School Bot — Test</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      max-width: 800px;
+      margin: 60px auto;
+      padding: 20px;
+      color: #333;
+    }
+    h1 { color: #1a56db; }
+    p { color: #666; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <h1>Narayana Educational Institutions</h1>
+  <p>Inspiring Young Minds and Empowering Dreams since 1979.</p>
+  <p>600K+ Learners · 50K+ Employees · 950+ Institutes · 23 States · 250+ Cities</p>
+  <p>Click the blue chat button in the bottom right corner to ask questions in English or Telugu.</p>
+
+  <!-- Narayana School Bot Widget -->
+  <script>
+  (function() {
+    const API = "https://narayana-school-bot.onrender.com";
+
+    const style = document.createElement("style");
+    style.textContent = `
+      #sb-fab {
+        position: fixed; bottom: 28px; right: 28px; z-index: 99999;
+        width: 60px; height: 60px; border-radius: 50%;
+        background: #1a56db; border: none; cursor: pointer;
+        box-shadow: 0 4px 16px rgba(26,86,219,0.35);
+        display: flex; align-items: center; justify-content: center;
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+      #sb-fab:hover { transform: scale(1.08); box-shadow: 0 6px 20px rgba(26,86,219,0.45); }
+      #sb-fab svg { width: 28px; height: 28px; fill: white; }
+
+      #sb-panel {
+        position: fixed; bottom: 100px; right: 28px; z-index: 99998;
+        width: 360px; max-height: 560px;
+        background: #fff; border-radius: 20px;
+        box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+        display: flex; flex-direction: column;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-size: 14px; overflow: hidden;
+        transition: opacity 0.2s, transform 0.2s;
+        opacity: 0; transform: translateY(16px) scale(0.97); pointer-events: none;
+      }
+      #sb-panel.open { opacity: 1; transform: none; pointer-events: all; }
+
+      #sb-header {
+        background: #1a56db; padding: 14px 18px;
+        display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+      }
+      #sb-header .sb-avatar {
+        width: 36px; height: 36px; border-radius: 50%;
+        background: rgba(255,255,255,0.2);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 18px;
+      }
+      #sb-header .sb-name { color: #fff; font-weight: 600; font-size: 15px; }
+      #sb-header .sb-sub  { color: rgba(255,255,255,0.75); font-size: 11px; }
+      #sb-header .sb-close {
+        margin-left: auto; background: none; border: none;
+        color: rgba(255,255,255,0.8); cursor: pointer; font-size: 22px; line-height: 1;
+        padding: 0 2px;
+      }
+      #sb-header .sb-close:hover { color: #fff; }
+
+      #sb-lang-bar {
+        background: #f0f4ff; padding: 8px 14px;
+        display: flex; gap: 8px; flex-shrink: 0;
+      }
+      .sb-lang-btn {
+        padding: 4px 14px; border-radius: 20px; border: 1.5px solid #c7d7fd;
+        background: #fff; color: #1a56db; font-size: 12px; font-weight: 500;
+        cursor: pointer; transition: all 0.15s;
+      }
+      .sb-lang-btn.active { background: #1a56db; color: #fff; border-color: #1a56db; }
+
+      #sb-messages {
+        flex: 1; overflow-y: auto; padding: 14px;
+        display: flex; flex-direction: column; gap: 12px;
+        scrollbar-width: thin;
+      }
+
+      .sb-msg { display: flex; flex-direction: column; gap: 2px; }
+      .sb-msg.user { align-items: flex-end; }
+      .sb-msg.bot  { align-items: flex-start; }
+
+      .sb-bubble { max-width: 82%; padding: 10px 14px; border-radius: 16px; line-height: 1.55; font-size: 13.5px; }
+      .sb-msg.user .sb-bubble { background: #1a56db; color: #fff; border-radius: 16px 16px 4px 16px; }
+      .sb-msg.bot .sb-bubble  { background: #f3f4f6; color: #111; border-radius: 16px 16px 16px 4px; }
+
+      .sb-lang-label { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 4px; }
+      .sb-lang-label.en { color: #1a56db; }
+      .sb-lang-label.te { color: #059669; }
+
+      .sb-answer-block { margin-top: 6px; }
+      .sb-answer-block + .sb-answer-block { margin-top: 10px; }
+      .sb-en-block { background: #eff6ff; border-left: 3px solid #1a56db; padding: 8px 12px; border-radius: 0 8px 8px 0; }
+      .sb-te-block { background: #ecfdf5; border-left: 3px solid #059669; padding: 8px 12px; border-radius: 0 8px 8px 0; }
+
+      .sb-audio-row { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+      .sb-play-btn {
+        display: flex; align-items: center; gap: 5px;
+        padding: 4px 12px; border-radius: 20px; border: 1.5px solid #ddd;
+        background: #fff; color: #444; font-size: 11px; font-weight: 500;
+        cursor: pointer; transition: all 0.15s;
+      }
+      .sb-play-btn:hover { border-color: #1a56db; color: #1a56db; }
+
+      .sb-typing { display: flex; gap: 4px; padding: 10px 14px; background: #f3f4f6; border-radius: 16px 16px 16px 4px; width: fit-content; }
+      .sb-dot { width: 7px; height: 7px; border-radius: 50%; background: #9ca3af; animation: sb-bounce 1.2s infinite; }
+      .sb-dot:nth-child(2) { animation-delay: 0.2s; }
+      .sb-dot:nth-child(3) { animation-delay: 0.4s; }
+      @keyframes sb-bounce { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-5px); } }
+
+      #sb-input-area { padding: 12px 14px; border-top: 1px solid #e5e7eb; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
+      #sb-text-row { display: flex; gap: 8px; }
+      #sb-text-input {
+        flex: 1; padding: 9px 14px; border: 1.5px solid #e5e7eb;
+        border-radius: 24px; font-size: 13.5px; outline: none; font-family: inherit;
+      }
+      #sb-text-input:focus { border-color: #1a56db; }
+      #sb-send-btn, #sb-mic-btn {
+        width: 38px; height: 38px; border-radius: 50%; border: none; cursor: pointer;
+        display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+      }
+      #sb-send-btn { background: #1a56db; }
+      #sb-send-btn svg { fill: white; width: 18px; height: 18px; }
+      #sb-mic-btn { background: #f3f4f6; }
+      #sb-mic-btn.recording { background: #fee2e2; animation: sb-pulse 1s infinite; }
+      @keyframes sb-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,0.3); } 50% { box-shadow: 0 0 0 8px rgba(220,38,38,0); } }
+      #sb-mic-status { font-size: 11px; color: #6b7280; text-align: center; }
+      .sb-welcome { text-align: center; padding: 1rem 0.5rem; color: #6b7280; font-size: 13px; line-height: 1.6; }
+      .sb-welcome .sb-school-name { font-size: 15px; font-weight: 600; color: #1a56db; margin-bottom: 4px; }
+    `;
+    document.head.appendChild(style);
+
+    const container = document.createElement("div");
+    container.innerHTML = `
+      <button id="sb-fab" aria-label="Open school assistant">
+        <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+      </button>
+      <div id="sb-panel">
+        <div id="sb-header">
+          <div class="sb-avatar">🏫</div>
+          <div>
+            <div class="sb-name">Narayana Assistant</div>
+            <div class="sb-sub">Ask anything about Narayana</div>
+          </div>
+          <button class="sb-close" id="sb-close-btn">×</button>
+        </div>
+        <div id="sb-lang-bar">
+          <button class="sb-lang-btn active" data-lang="both">EN + తె</button>
+          <button class="sb-lang-btn" data-lang="en">English only</button>
+          <button class="sb-lang-btn" data-lang="te">తెలుగు only</button>
+        </div>
+        <div id="sb-messages">
+          <div class="sb-welcome">
+            <div class="sb-school-name">Narayana Educational Institutions</div>
+            Ask me anything — admissions, fees, academics, centers, or contact info.<br>
+            మీరు తెలుగులో కూడా అడగవచ్చు!
+          </div>
+        </div>
+        <div id="sb-input-area">
+          <div id="sb-text-row">
+            <input id="sb-text-input" type="text" placeholder="Ask in English or Telugu..." autocomplete="off" />
+            <button id="sb-mic-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#374151" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+              </svg>
+            </button>
+            <button id="sb-send-btn">
+              <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+            </button>
+          </div>
+          <div id="sb-mic-status"></div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(container);
+
+    let isOpen = false, displayLang = "both", isRecording = false;
+    let mediaRecorder = null, audioChunks = [], currentAudio = null;
+
+    const fab = document.getElementById("sb-fab");
+    const panel = document.getElementById("sb-panel");
+    const closeBtn = document.getElementById("sb-close-btn");
+    const messages = document.getElementById("sb-messages");
+    const textInput = document.getElementById("sb-text-input");
+    const sendBtn = document.getElementById("sb-send-btn");
+    const micBtn = document.getElementById("sb-mic-btn");
+    const micStatus = document.getElementById("sb-mic-status");
+
+    fab.addEventListener("click", () => { isOpen = !isOpen; panel.classList.toggle("open", isOpen); if(isOpen) textInput.focus(); });
+    closeBtn.addEventListener("click", () => { isOpen = false; panel.classList.remove("open"); });
+
+    document.querySelectorAll(".sb-lang-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".sb-lang-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        displayLang = btn.dataset.lang;
+      });
+    });
+
+    function escapeHtml(s) { return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+    function scrollBottom() { messages.scrollTop = messages.scrollHeight; }
+
+    function addUserMsg(text) {
+      const div = document.createElement("div");
+      div.className = "sb-msg user";
+      div.innerHTML = `<div class="sb-bubble">${escapeHtml(text)}</div>`;
+      messages.appendChild(div); scrollBottom();
+    }
+
+    function addTyping() {
+      const div = document.createElement("div");
+      div.className = "sb-msg bot"; div.id = "sb-typing";
+      div.innerHTML = `<div class="sb-typing"><div class="sb-dot"></div><div class="sb-dot"></div><div class="sb-dot"></div></div>`;
+      messages.appendChild(div); scrollBottom(); return div;
+    }
+
+    function addBotAnswer(data, typingEl) {
+      if (typingEl) typingEl.remove();
+      const div = document.createElement("div");
+      div.className = "sb-msg bot";
+      const showEn = displayLang === "both" || displayLang === "en";
+      const showTe = displayLang === "both" || displayLang === "te";
+      let html = `<div class="sb-bubble">`;
+      if (showEn && data.answers.en) html += `<div class="sb-answer-block"><div class="sb-lang-label en">🇬🇧 English</div><div class="sb-en-block">${escapeHtml(data.answers.en)}</div></div>`;
+      if (showTe && data.answers.te) html += `<div class="sb-answer-block"><div class="sb-lang-label te">🔵 Telugu</div><div class="sb-te-block">${escapeHtml(data.answers.te)}</div></div>`;
+      if (data.audio) {
+        html += `<div class="sb-audio-row">`;
+        if (showEn && data.audio.en) html += `<button class="sb-play-btn" data-b64="${data.audio.en}">▶ English</button>`;
+        if (showTe && data.audio.te) html += `<button class="sb-play-btn te" data-b64="${data.audio.te}">▶ తెలుగు</button>`;
+        html += `</div>`;
+      }
+      html += `</div>`;
+      div.innerHTML = html;
+      div.querySelectorAll(".sb-play-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          if (currentAudio) currentAudio.pause();
+          currentAudio = new Audio("data:audio/mp3;base64," + btn.dataset.b64);
+          currentAudio.play();
+        });
+      });
+      messages.appendChild(div); scrollBottom();
+      // Auto-play
+      const autoLang = data.lang_detected === "te" ? "te" : "en";
+      if (data.audio && data.audio[autoLang]) {
+        setTimeout(() => { if(currentAudio) currentAudio.pause(); currentAudio = new Audio("data:audio/mp3;base64,"+data.audio[autoLang]); currentAudio.play(); }, 300);
+      }
+    }
+
+    async function sendQuestion(question) {
+      if (!question.trim()) return;
+      textInput.value = "";
+      addUserMsg(question);
+      const typing = addTyping();
+      sendBtn.disabled = true;
+      try {
+        const resp = await fetch(`${API}/ask`, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({question, tts: true})
+        });
+        if (!resp.ok) throw new Error(await resp.text());
+        addBotAnswer(await resp.json(), typing);
+      } catch(e) {
+        typing.remove();
+        const div = document.createElement("div");
+        div.className = "sb-msg bot";
+        div.innerHTML = `<div class="sb-bubble" style="color:#dc2626;">⚠️ Something went wrong. Please try again.</div>`;
+        messages.appendChild(div); scrollBottom();
+      } finally { sendBtn.disabled = false; }
+    }
+
+    sendBtn.addEventListener("click", () => sendQuestion(textInput.value));
+    textInput.addEventListener("keydown", e => { if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendQuestion(textInput.value);} });
+
+    micBtn.addEventListener("click", async () => {
+      if (!isRecording) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+          mediaRecorder = new MediaRecorder(stream);
+          audioChunks = [];
+          mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+          mediaRecorder.onstop = async () => {
+            stream.getTracks().forEach(t => t.stop());
+            micStatus.textContent = "Processing...";
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (SpeechRecognition) {
+              const recog = new SpeechRecognition();
+              recog.lang = "te-IN"; recog.interimResults = false;
+              recog.onresult = e => { const t = e.results[0][0].transcript; micStatus.textContent = `"${t}"`; setTimeout(()=>{micStatus.textContent="";},2000); sendQuestion(t); };
+              recog.onerror = () => { micStatus.textContent = "Could not understand. Please type."; setTimeout(()=>{micStatus.textContent="";},3000); };
+              recog.start();
+              setTimeout(() => { try{recog.stop();}catch(e){} }, 6000);
+            } else {
+              micStatus.textContent = "Voice not supported. Please type.";
+              setTimeout(()=>{micStatus.textContent="";},3000);
+            }
+          };
+          mediaRecorder.start();
+          isRecording = true; micBtn.classList.add("recording");
+          micStatus.textContent = "🔴 Recording... click to stop";
+        } catch(e) { micStatus.textContent = "Mic access denied."; setTimeout(()=>{micStatus.textContent="";},3000); }
+      } else {
+        mediaRecorder.stop(); isRecording = false; micBtn.classList.remove("recording");
+      }
+    });
+  })();
+  </script>
+</body>
+</html>
