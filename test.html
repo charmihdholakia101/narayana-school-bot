@@ -241,16 +241,23 @@
         html += `<div class="sb-audio-row">`;
         if (showEn && data.audio.en) html += `<button class="sb-play-btn" data-b64="${data.audio.en}">▶ English</button>`;
         if (showTe && data.audio.te) html += `<button class="sb-play-btn te" data-b64="${data.audio.te}">▶ తెలుగు</button>`;
+        html += `<button class="sb-play-btn sb-stop-btn" id="sb-stop-audio">⏹ Stop</button>`;
         html += `</div>`;
       }
       html += `</div>`;
       div.innerHTML = html;
       div.querySelectorAll(".sb-play-btn").forEach(btn => {
-        btn.addEventListener("click", () => {
-          if (currentAudio) currentAudio.pause();
-          currentAudio = new Audio("data:audio/mp3;base64," + btn.dataset.b64);
-          currentAudio.play();
-        });
+        if (btn.id === "sb-stop-audio") {
+          btn.addEventListener("click", () => {
+            if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+          });
+        } else {
+          btn.addEventListener("click", () => {
+            if (currentAudio) currentAudio.pause();
+            currentAudio = new Audio("data:audio/mp3;base64," + btn.dataset.b64);
+            currentAudio.play();
+          });
+        }
       });
       messages.appendChild(div); scrollBottom();
       // Auto-play
@@ -302,8 +309,8 @@
         }
         const recog = new SpeechRecognition();
         recog.lang = "te-IN,en-IN";
-        recog.interimResults = false;
-        recog.continuous = false;
+        recog.interimResults = true;
+        recog.continuous = true;
 
         recog.onstart = () => {
           isRecording = true;
@@ -312,10 +319,23 @@
           micStatus.textContent = "🔴 Listening... click to stop";
         };
         recog.onresult = e => {
-          const t = e.results[0][0].transcript;
-          micStatus.textContent = `"${t}"`;
-          setTimeout(()=>{micStatus.textContent="";},2000);
-          sendQuestion(t);
+          // Show interim results as user speaks
+          let interim = "";
+          let final = "";
+          for (let i = e.resultIndex; i < e.results.length; i++) {
+            if (e.results[i].isFinal) {
+              final += e.results[i][0].transcript;
+            } else {
+              interim += e.results[i][0].transcript;
+            }
+          }
+          if (interim) micStatus.textContent = `🎤 "${interim}"`;
+          if (final) {
+            micStatus.textContent = `✅ "${final}"`;
+            try { micBtn._recog.stop(); } catch(e) {}
+            setTimeout(()=>{micStatus.textContent="";},2000);
+            sendQuestion(final);
+          }
         };
         recog.onerror = () => {
           micStatus.textContent = "Could not understand. Please type.";
