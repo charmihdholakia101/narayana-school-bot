@@ -1,9 +1,9 @@
 """
 Narayana Educational Institutions Voice Bot — FastAPI Backend
+- Uses boto3 with long-term AWS credentials (never expires)
 - Scrapes narayanagroup.com on startup
-- Answers questions in English + Telugu
-- Uses AWS Bedrock (Bearer Token key)
-- Handles 25 concurrent users via async + semaphore
+- Answers in English + Telugu
+- Handles 25 concurrent users
 """
 
 import os
@@ -13,7 +13,9 @@ import base64
 import asyncio
 import logging
 from typing import Optional
+from concurrent.futures import ThreadPoolExecutor
 
+import boto3
 import httpx
 from gtts import gTTS
 from bs4 import BeautifulSoup
@@ -25,15 +27,16 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────
-# CONFIG
+# CONFIG — long-term credentials via boto3
 # ─────────────────────────────────────────────
-AWS_BEARER_TOKEN  = os.getenv("AWS_BEARER_TOKEN_BEDROCK", "")
-AWS_REGION        = os.getenv("AWS_REGION", "us-east-1")
-MODEL_ID          = "us.amazon.nova-lite-v1:0"
-BEDROCK_URL       = f"https://bedrock-runtime.{AWS_REGION}.amazonaws.com/model/{MODEL_ID}/invoke"
+AWS_ACCESS_KEY_ID     = os.getenv("AWS_ACCESS_KEY_ID", "")
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "")
+AWS_REGION            = os.getenv("AWS_REGION", "us-east-1")
+MODEL_ID              = "us.amazon.nova-lite-v1:0"
 
 LLM_SEMAPHORE = asyncio.Semaphore(15)
 SCHOOL_CONTEXT = ""
+executor = ThreadPoolExecutor(max_workers=10)
 
 SCHOOL_URLS = [
     "https://narayanagroup.com/",
@@ -63,6 +66,15 @@ app.add_middleware(
 )
 
 
+def get_bedrock_client():
+    return boto3.client(
+        "bedrock-runtime",
+        region_name=AWS_REGION,
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+    )
+
+
 @app.on_event("startup")
 async def startup():
     global http_client, SCHOOL_CONTEXT
@@ -80,6 +92,7 @@ async def startup():
 @app.on_event("shutdown")
 async def shutdown():
     await http_client.aclose()
+    executor.shutdown(wait=False)
 
 
 # ─────────────────────────────────────────────
@@ -119,29 +132,37 @@ async def rescrape():
 
 
 # ─────────────────────────────────────────────
-# BEDROCK LLM
+# BEDROCK LLM (boto3 — never expires)
 # ─────────────────────────────────────────────
+
+def _call_bedrock_sync(system: str, user: str, max_tokens: int) -> str:
+    client = get_bedrock_client()
+    payload = {
+        "messages": [
+            {"role": "user", "content": [{"text": f"{system}\n\n{user}"}]}
+        ],
+        "inferenceConfig": {"max_new_tokens": max_tokens},
+    }
+    resp = client.invoke_model(
+        modelId=MODEL_ID,
+        body=json.dumps(payload),
+        contentType="application/json",
+        accept="application/json",
+    )
+    result = json.loads(resp["body"].read())
+    return result["output"]["message"]["content"][0]["text"].strip()
+
 
 async def call_claude(system: str, user: str, max_tokens: int = 600) -> str:
     async with LLM_SEMAPHORE:
-        payload = {
-            "messages": [
-                {"role": "user", "content": [{"text": f"{system}\n\n{user}"}]}
-            ],
-            "inferenceConfig": {"max_new_tokens": max_tokens},
-        }
-        headers = {
-            "Authorization": f"Bearer {AWS_BEARER_TOKEN}",
-            "Content-Type": "application/json",
-        }
+        loop = asyncio.get_event_loop()
         try:
-            resp = await http_client.post(BEDROCK_URL, headers=headers, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-            return data["output"]["message"]["content"][0]["text"].strip()
-        except httpx.HTTPStatusError as e:
-            log.error(f"Bedrock error: {e.response.text}")
-            raise HTTPException(status_code=502, detail=f"LLM error: {e.response.text}")
+            return await loop.run_in_executor(
+                executor, _call_bedrock_sync, system, user, max_tokens
+            )
+        except Exception as e:
+            log.error(f"Bedrock error: {e}")
+            raise HTTPException(status_code=502, detail=f"LLM error: {str(e)}")
 
 
 async def detect_language(text: str) -> str:
@@ -168,8 +189,7 @@ async def get_answer(question_en: str) -> str:
             "with 600K+ learners annually and 50K+ skilled employees, established in 1979. "
             "Answer questions ONLY from the school information provided. "
             "Be warm, helpful, and concise (2-4 sentences). "
-            "If not available, say so politely and suggest visiting narayanagroup.com "
-            "or using the Fee Enquiry page."
+            "If not available, say so politely and suggest visiting narayanagroup.com."
         ),
         f"SCHOOL INFORMATION:\n{SCHOOL_CONTEXT}\n\nQUESTION: {question_en}",
         max_tokens=400,
@@ -232,8 +252,8 @@ async def ask(req: AskRequest):
     if req.tts:
         loop = asyncio.get_event_loop()
         en_tts, te_tts = await asyncio.gather(
-            loop.run_in_executor(None, make_tts, en_answer, "en"),
-            loop.run_in_executor(None, make_tts, te_answer, "te"),
+            loop.run_in_executor(executor, make_tts, en_answer, "en"),
+            loop.run_in_executor(executor, make_tts, te_answer, "te"),
         )
         if en_tts: audio["en"] = en_tts
         if te_tts: audio["te"] = te_tts
